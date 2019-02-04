@@ -32,47 +32,92 @@ public class SlackBot extends Bot {
 
     @Controller(events = {EventType.DIRECT_MESSAGE}, pattern = "(?i:.*(hi|hello|help|hey|hey there|what’s up|what's up|how’s it going|how's it going).*)")
     public void sayHello(WebSocketSession session, Event event) {
-        reply(session, event, "Hi, I am " + slackService.getCurrentUser().getName());
-    }
-
-
-    @Controller(events = {EventType.DIRECT_MESSAGE}, pattern = "(?i:.*(setup meeting|setup a meeting).*)", next = "confirmTiming")
-    public void setupMeeting(WebSocketSession session, Event event) {
-        startConversation(event, "confirmTiming");
-        reply(session, event, "Cool! At what time (ex. 15:30) do you want me to set up the meeting?");
+        reply(session, event, "Hi, I am " + slackService.getCurrentUser().getName() + ". I'm here to help you to report your telecommuting days.\nStart a 'report telecommuting' command");
+        stopConversation(event);
     }
 
     @Controller(events = {EventType.DIRECT_MESSAGE})
     public void sayNoIdea(WebSocketSession session, Event event) {
-        reply(session, event, "Hi, I am " + slackService.getCurrentUser().getName() + " and I don't know what do you want from me!");
+        reply(session, event, "Hi, I am " + slackService.getCurrentUser().getName() + ". I'm here to help you to report your telecommuting days.\nStart a 'report telecommuting' command");
+        stopConversation(event);
     }
 
 
-    @Controller(events = {EventType.DIRECT_MESSAGE}, next = "askWhetherToRemind")
-    public void confirmTiming(WebSocketSession session, Event event) {
+    @Controller(events = {EventType.DIRECT_MESSAGE}, pattern = "(?i:.*(report|report a day|report telecommuting).*)", next = "setDate")
+    public void reportWork(WebSocketSession session, Event event) {
+        startConversation(event, "setDate");
 
-        if (event.getText().matches("(?i:.*(cancel|end|halt|terminate|stop|abandon|abort).*)")) {
-            reply(session, event, "No problem. You can always schedule one with the 'setup meeting' command.");
-            stopConversation(event);
-        } else {
-            if (event.getText().matches("^([0-9]|0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$")) {
-                reply(session, event, "Your meeting is set at " + event.getText() +
-                        ". Would you like me to set a reminder for you?");
-                nextConversation(event);
+        reply(session, event, "Cool "+"!\nIt seems that we have here a :smiley: employee.\nBy the way, I always to telecommuting. :stuck_out_tongue_winking_eye:\nBut let's talk about you.\nWhen it was (ex. 2019-12-1)?");
+    }
+
+    @Controller(events = {EventType.DIRECT_MESSAGE}, next = "askForTheGoals")
+    public void setDate(WebSocketSession session, Event event) {
+        if (this.isConversationOn(event)) {
+            if (shouldStopTheConversation(session, event)) {
+                stopConversation(event);
             } else {
-                reply(session, event, "I have not understand you! At what time (ex. 15:30) do you want me to set up the meeting?");
+                if (event.getText().matches("^(20[0-9][0-9])-([1-9]|1[0-2])-([1-9]|1[0-9]|2[0-9]|3[0-1])$")) {
+                    reply(session, event, "The day was " + event.getText() + ". Which were the initial goals?");
+                    nextConversation(event);
+                } else {
+                    reply(session, event, "I have not understand you! When it was (ex. 2019-12-1)?");
+                }
+            }
+        }
+    }
+
+    @Controller(events = {EventType.DIRECT_MESSAGE}, next = "askForTheCompletion")
+    public void askForTheGoals(WebSocketSession session, Event event) {
+        if (this.isConversationOn(event)) {
+            if (shouldStopTheConversation(session, event)) {
+                stopConversation(event);
+            } else {
+                reply(session, event, ":ok_hand:\nIt seems a lot of work to me. Did you achieve all the objectives?");
+                nextConversation(event);
+            }
+        }
+    }
+
+    @Controller(events = {EventType.DIRECT_MESSAGE}, next = "askForIncidences")
+    public void askForTheCompletion(WebSocketSession session, Event event) {
+        if (this.isConversationOn(event)) {
+            if (shouldStopTheConversation(session, event)) {
+                stopConversation(event);
+            } else {
+                if (isOK(event.getText())) {
+                    reply(session, event, ":clap::clap::clap:\nDid you have any kind of incidence?.");
+                    nextConversation(event);
+                } else {
+                    if (isKO(event.getText())) {
+                        reply(session, event, ":shit:\nDid you have any kind of incidence?.");
+                        nextConversation(event);
+                    } else {
+                        reply(session, event, "Did you achieve all the objectives?");
+                    }
+                }
             }
         }
     }
 
     @Controller(events = {EventType.DIRECT_MESSAGE})
-    public void askWhetherToRemind(WebSocketSession session, Event event) {
-        if (isOK(event.getText())) {
-            reply(session, event, "Great! I will remind you tomorrow before the meeting.");
-        } else {
-            reply(session, event, "Okay, don't forget to attend the meeting tomorrow :)");
+    public void askForIncidences(WebSocketSession session, Event event) {
+        if (this.isConversationOn(event)) {
+            if (shouldStopTheConversation(session, event)) {
+                stopConversation(event);
+            } else {
+                if (isOK(event.getText())) {
+                    reply(session, event, ":shit:\nI'm sorry, we are continuously improving. I'm going to send yor comments. You are all set. ");
+                    stopConversation(event);
+                } else {
+                    if (isKO(event.getText())) {
+                        reply(session, event, ":ok_hand:\nSound fantastic. Thank you very much, you are all set. ");
+                        stopConversation(event);
+                    } else {
+                        reply(session, event, "Did you have any kind of incidence?");
+                    }
+                }
+            }
         }
-        stopConversation(event);
     }
 
     @Controller(events = EventType.PIN_ADDED)
@@ -85,12 +130,26 @@ public class SlackBot extends Bot {
         logger.info("File shared: {}", event);
     }
 
-    public boolean isOK(String inputStr) {
+    private boolean isOK(String inputStr) {
         return Arrays.asList("yes", "ok", "okay", "yeah", "do it", "that's fine", "fine",
                 "cool", "yea", "okey-dokey", "by all means", "aye aye",
                 "roger", "yup", "totally", "sure", "10-4", "alright", "sounds good",
                 "certainly", "definitely", "of course", "gladly", "indeed", "obviously", ":+1:", ":ok_hand:")
                 .stream()
                 .anyMatch(s -> inputStr.toLowerCase().contains(s));
+    }
+
+    private boolean isKO(String inputStr) {
+        return Arrays.asList("no", ":ko_hand:")
+                .stream()
+                .anyMatch(s -> inputStr.toLowerCase().contains(s));
+    }
+
+
+    private boolean shouldStopTheConversation(WebSocketSession session, Event event) {
+        if (event.getText().matches("(?i:.*(cancel|end|halt|terminate|stop|abandon|abort).*)")) {
+            reply(session, event, "No problem. You can always report me with the 'report telecommuting' command.");
+            return true;
+        } else return false;
     }
 }
